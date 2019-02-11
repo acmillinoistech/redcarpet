@@ -23,4 +23,4 @@
     - Vinesh is very familiar with the framework
 - Created a `Tile` component. Is this the best name for the component?
 
-![Progress on 2/10](media/progress-0210.png)
+![Progress on 2/10](media/screenshot-0210.png)
