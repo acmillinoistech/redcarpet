@@ -1,25 +1,28 @@
 import React, { Component } from 'react';
-import logo from './logo.svg';
-import './App.css';
+// import './App.css';
+
+
+class Tile extends Component {
+  render() {
+    const me = this.props.celeb;
+    return (
+      <li>{me.name}</li>
+    );
+  }
+}
+
 
 class App extends Component {
   render() {
+    const tiles = this.props.celebs.map((celeb, idx) =>
+      <Tile key={idx} celeb={celeb} />
+    );
+    console.log(this.props.tiles)
     return (
       <div className="App">
-        <header className="App-header">
-          <img src={logo} className="App-logo" alt="logo" />
-          <p>
-            Edit <code>src/App.js</code> and save to reload.
-          </p>
-          <a
-            className="App-link"
-            href="https://reactjs.org"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Learn React
-          </a>
-        </header>
+        <h1>Illinois Tech Celebrities</h1>
+        <p>Here are some you might like:</p>
+        <ul>{tiles}</ul>
       </div>
     );
   }
