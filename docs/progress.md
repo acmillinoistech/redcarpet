@@ -24,3 +24,16 @@
 - Created a `Tile` component. Is this the best name for the component?
 
 ![Progress on 2/10](media/screenshot-0210.png)
+
+### 2/13/2019 (Prince, Erick, Vinesh)
+
+- Added a column layout using is-multiline class from bulma
+    - Added Cards to each tile component
+- Scraped celebrity data from Cameo website
+- Added images to celebrity tiles
+
+![Progress on 2/13](media/screenshot-0213.png)
+
+
+
+
