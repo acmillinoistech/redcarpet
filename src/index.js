@@ -3,11 +3,8 @@ import ReactDOM from 'react-dom';
 import './bulma.css';
 import App from './App';
 import * as serviceWorker from './serviceWorker';
-
-const CELEBS = [
-    {name: "Prince Hodonou"},
-    {name: "Soren Spicknall"}
-]
+import celebs from './celebs';
+const CELEBS = celebs;
 
 ReactDOM.render(<App celebs={CELEBS}/>, document.getElementById('root'));
 

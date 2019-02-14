@@ -6,7 +6,18 @@ class Tile extends Component {
   render() {
     const me = this.props.celeb;
     return (
-      <li>{me.name}</li>
+      <div className="column is-one-quarter"> 
+        <div className="card">
+          <div className="card-image">
+            <figure className="image">
+              <img src={me.image} alt= {me.name}/>
+            </figure>
+          </div>
+          <div className="card-content">
+            {me.name}
+          </div>
+        </div>
+      </div>
     );
   }
 }
@@ -30,7 +41,9 @@ class App extends Component {
         <section className="section">        
         <div className="container content">
             <p>Here are some you might like:</p>
-            <ul>{tiles}</ul>
+            <div className="columns is-multiline">
+              {tiles}
+            </div>
         </div>
         </section>
       </div>
