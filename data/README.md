@@ -6,9 +6,11 @@ There are almost 9,000 talent pages to scrape, each taking roughly one second to
 
 **Note:** This data snapshot was taken on Monday, March 11th, 2019. A list of the pages visited by this scraper run can be found in `scraper_log.txt`. The number of reactions for each talent changes rapidly, so that feature will not be up to date with the current total on the live website.
 
-The scraper may be run again if:
+The scraper may need to be run again if:
 
-- The data is not 
+- New talent are added
+- Ratings data (reactions and stars) is no longer representative of user trends
+- New features must be added to the item model
 
 If the scraper must be run again, ensure that the dependencies are installed and, in this directory, run:
 
