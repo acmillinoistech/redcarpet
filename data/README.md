@@ -27,7 +27,18 @@ Possible scraper enhancements:
 
 ## 2. Prepare Item Matrix
 
-...
+Run the Jupyter notebook `Prepare Item Matrix.ipynb`, which will perform the following tasks:
+
+- Create a multi-label matrix to represent which categories (labels) a talent (item) belongs to (103 unique categories).
+- Drop duplicate item records for talent that belong to multiple categories.
+
+The notebook will write the dataframe to `talent.csv`.
+
+The notebook will also write the useful string constants to `strings.py`:
+
+- `READABLE_LABELS`: the pretty names of each category, in the order of the columns in the multi-label matrix.
+- `COLUMN_LABELS`: the actual names of each column in the multi-label matrix, in order.
+- `ATTRIBUTES`: the dataframe columns that are not part of the multi-label matrix.
 
 ## 3. Simulate User x Item Matrix
 
