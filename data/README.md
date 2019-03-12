@@ -40,6 +40,18 @@ The notebook will also write the useful string constants to `strings.py`:
 - `COLUMN_LABELS`: the actual names of each column in the multi-label matrix, in order.
 - `ATTRIBUTES`: the dataframe columns that are not part of the multi-label matrix.
 
-## 3. Simulate User x Item Matrix
+The attributes for each talent are:
 
-...
+- `id`: a unique identifier for the talent, also the URL of their webpage: `cameo.com/${id}`.
+- `name`: display name for the talent.
+- `price`: price in dollars to book the talent.
+- `reactions`: the number of users who have reacted to videos from the talent (non-negative integer).
+- `stars`: the cumulative rating from users who booked the talent (float between 0 and 5, inclusive).
+- `joined`: the month and year in which the talent first became available on the platform.
+- `categories`: a list of readable category names the talent belongs to, more convenient to view than the item matrix.
+
+## 3. Simulate Transactions Matrix
+
+The transactions matrix has rows for each user and columns for each item. A "hit" in the matrix indicates a transaction (purchase, like, rating) from the user concerning the item.
+
+In this step, simulate a transaction matrix that students will use along with the item matrix to train their recommender systems.
