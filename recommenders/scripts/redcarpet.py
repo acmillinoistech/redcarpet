@@ -246,3 +246,41 @@ def content_filter(items_train, recs_input, k=10, sim_fn=jaccard_sim):
         recs = top_ranks[0:k_recs]
         recs_pred.append(recs)
     return recs_pred
+
+
+def weighted_hybrid(components, k=10):
+    """
+    Hybrid recommender system using weights.
+    params:
+        components: list of tuples where each tuple has (recs list, weight)
+            where recs_list is a list of tuples where each tuple has
+            (item index, relevance score) and weight is the factor used to
+            scale the relevance scores for this component
+        k: number of items to recommend for each user
+    returns:
+        recs_pred: list of lists of tuples of recommendations where
+            each tuple has (item index, relevance score) with the list
+            of tuples sorted in order of decreasing relevance
+    """
+    if len(components) < 1:
+        raise ValueError("Must provide at least one component.")
+    n_users = len(components[0][0])
+    user_recs = []
+    user_item_maps = [{} for i in range(n_users)]
+    for (recs_list, weight) in components:
+        if len(recs_list) != n_users:
+            raise ValueError(
+                "Length of components do not match. Should be equal to number of users."
+            )
+        for user_id, recs in enumerate(recs_list):
+            item_map = user_item_maps[user_id]
+            for (item, score) in recs:
+                if item not in item_map:
+                    item_map[item] = 0
+                item_map[item] += weight * score
+    for item_map in user_item_maps:
+        item_scores = item_map.items()
+        ranks = sorted(item_scores, key=lambda p: p[1], reverse=True)
+        top_recs = ranks[0:k]
+        user_recs.append(top_recs)
+    return user_recs
