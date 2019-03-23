@@ -45,8 +45,8 @@ def get_recs(user_recs, k=None):
             list has the column indices of recommended items
             sorted in order they appeared in user_recs
     """
-    recs = [[item for item, score in recs] for recs in user_recs]
-    return recs[0:k]
+    recs = [[item for item, score in recs][0:k] for recs in user_recs]
+    return recs
 
 
 def write_kaggle_recs(recs_list, filename=None, headers=["Id", "Predicted"]):
