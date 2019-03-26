@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import ml_metrics
 import base64
+import matplotlib.pyplot as plt
+import seaborn as sns
 from mlxtend.frequent_patterns import apriori
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import svds
@@ -210,6 +212,136 @@ def get_hit_counts(s_hidden, recs_pred, k=10):
         ix = r_true.intersection(set(r_pred[0:k]))
         hits.append(len(ix))
     return hits
+
+
+def get_all_scores(rec_scores, k=10):
+    all_scores = []
+    for recs in rec_scores:
+        for (item, score) in recs[0:k]:
+            all_scores.append(score)
+    return all_scores
+
+
+"""
+ANALYSIS TOOLS
+"""
+
+
+def show_apk_dist(s_hidden, models, k=10, bin_size=0.1):
+    bins = np.arange(0, 1 + bin_size, bin_size)
+    pal = sns.color_palette("hls", len(models))
+    for ((rec_scores, name), color) in zip(models, pal):
+        apks = get_apk_scores(s_hidden, get_recs(rec_scores), k=k)
+        sns.distplot(apks, kde=False, label=name, bins=bins, color=color)
+    plt.xticks(bins)
+    plt.xlabel("Average Precision in Top {}".format(k))
+    plt.ylabel("Number of Users")
+    plt.title("AP@K Score Distribution")
+    plt.gcf().set_size_inches((8, 5))
+    plt.grid()
+    plt.legend(
+        loc="upper left", bbox_to_anchor=(1.0, 1.0), title="Models", frameon=False
+    )
+    plt.show()
+
+
+def show_hit_dist(s_hidden, models, k=10):
+    bins = range(k)
+    pal = sns.color_palette("hls", len(models))
+    for ((rec_scores, name), color) in zip(models, pal):
+        hits = get_hit_counts(s_hidden, get_recs(rec_scores), k=k)
+        sns.distplot(hits, kde=False, label=name, bins=bins, color=color)
+    plt.xticks(bins)
+    plt.xlabel("Number of Successful Recommendations in Top {}".format(k))
+    plt.ylabel("Number of Users")
+    plt.title("Hit Count Distribution")
+    plt.gcf().set_size_inches((8, 5))
+    plt.grid()
+    plt.legend(
+        loc="upper left", bbox_to_anchor=(1.0, 1.0), title="Models", frameon=False
+    )
+    plt.show()
+
+
+def show_score_dist(models, k=10, bins=None):
+    pal = sns.color_palette("hls", len(models))
+    for ((rec_scores, name), color) in zip(models, pal):
+        scores = get_all_scores(rec_scores, k=k)
+        if bins is not None:
+            sns.distplot(scores, kde=False, label=name, color=color, bins=bins)
+        else:
+            sns.distplot(scores, kde=False, label=name, color=color)
+    if bins is not None:
+        plt.xticks(bins)
+    plt.xlabel("Score for Recommended Item in Top {}".format(k))
+    plt.ylabel("Number of Items")
+    plt.title("Item Score Distribution")
+    plt.gcf().set_size_inches((8, 5))
+    plt.grid()
+    plt.legend(
+        loc="upper left", bbox_to_anchor=(1.0, 1.0), title="Models", frameon=False
+    )
+    plt.show()
+
+
+def show_user_detail(s_input, s_hidden, rec_scores, uid, name_fn=None, k=10):
+    s_pred = get_recs(rec_scores)
+    print("User: {}".format(uid))
+    print("Given:       {}".format(sorted(s_input[uid])))
+    print("Recommended: {}".format(sorted(s_pred[uid])))
+    print("Actual:      {}".format(sorted(s_hidden[uid])))
+    set_intersect = set(s_pred[uid]).intersection(set(s_hidden[uid]))
+    n_intersect = len(set_intersect)
+    apk = mapk_score([s_hidden[uid]], [s_pred[uid]], k)
+    print()
+    print("Recommendation Hits = {}".format(n_intersect))
+    print("Average Precision   = {0:.3f}".format(apk))
+    print()
+    print("All Recommendation Scores:")
+    for i, (item_id, score) in enumerate(rec_scores[uid]):
+        hit = "Y" if item_id in s_hidden[uid] else " "
+        item_name = "Item {}".format(item_id)
+        if name_fn is not None:
+            item_name = name_fn(item_id)
+        print(
+            "{0}. [{3}] ({2:.3f}) {1}".format(
+                str(i + 1).zfill(2), item_name, score, hit
+            )
+        )
+
+
+def show_user_recs(s_hidden, rec_scores, k=10):
+    apks = get_apk_scores(s_hidden, get_recs(rec_scores), k=k)
+    hits = get_hit_counts(s_hidden, get_recs(rec_scores), k=k)
+    cols = ["User", "APK", "Hits"]
+    data = {"User": range(len(rec_scores)), "APK": apks, "Hits": hits}
+    return pd.DataFrame(data)[cols]
+
+
+def show_item_recs(s_hidden, rec_scores, k=10):
+    item_res = {}
+    for (user, likes) in zip(rec_scores, s_hidden):
+        for (i, score) in user:
+            if i not in item_res:
+                item_res[i] = {"Item": i, "Results": [], "Scores": []}
+            item_res[i]["Results"].append(1 if i in likes else 0)
+            item_res[i]["Scores"].append(score)
+    res = []
+    for i in item_res:
+        record = item_res[i]
+        total = len(record["Results"])
+        hits = sum(record["Results"])
+        res.append(
+            {
+                "Item": i,
+                "Recommended": total,
+                "Hits": hits,
+                "Hit Rate": hits / total,
+                "Avg Score": np.mean(record["Scores"]),
+            }
+        )
+    cols = ["Item", "Recommended", "Hits", "Hit Rate", "Avg Score"]
+    return pd.DataFrame(res)[cols]
 
 
 """
