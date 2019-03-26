@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import ml_metrics
 import base64
+from mlxtend.frequent_patterns import apriori
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import svds
 from IPython.display import HTML
@@ -93,6 +94,7 @@ def download_kaggle_recs(recs_list, filename=None, headers=["Id", "Predicted"]):
         html: HTML download link to display in a notebook, click
             to download the submission file
     """
+    # Based on: https://www.kaggle.com/rtatman/download-a-csv-file-from-a-kernel
     if filename is None:
         raise ValueError("Must provide a filename.")
     rec_df = pd.DataFrame(
@@ -378,25 +380,265 @@ def sorenson_dice_sim(u, v):
 
 
 """
+ASSOCIATION RULE METRICS
+Based on: https://github.com/resumesai/resumesai.github.io/blob/master/analysis/Rule%20Mining.ipynb
+"""
+
+
+def sets_to_contingency(a, b, N):
+    """
+    Creates a contingency table from two sets.
+    params:
+        a, b: sets to compare
+        N: total number of possible items
+    returns:
+        (f11, f10, f01, f00) tuple of contingency table entries:
+        f11 = # of items both in a and b
+        f10 = # of items only in a
+        f01 = # of items only in b
+        f00 = # of items not in either a or b
+    """
+    f11 = len(a.intersection(b))
+    f10 = len(a) - f11
+    f01 = len(b) - f11
+    f00 = N - (f11 + f10 + f01)
+    return (f11, f10, f01, f00)
+
+
+def rule_support(f11, f10, f01, f00):
+    """
+    Computes the support for a rule `a -> b` based on the contingency table.
+    params:
+        f11 = count a and b appearing together
+        f10 = count of a appearing without b
+        f01 = count of b appearing without a
+        f00 = count of neither a nor b appearing
+    returns:
+        float in range [0, 1] where 1 indicates maximum support and
+            0 indicates no support
+    """
+    N = f11 + f10 + f01 + f00
+    zero = 1e-10
+    return f11 / (N + zero)
+
+
+def rule_confidence(f11, f10, f01, f00):
+    """
+    Computes the confidence for a rule `a -> b` based on the contingency table.
+    params:
+        f11 = count a and b appearing together
+        f10 = count of a appearing without b
+        f01 = count of b appearing without a
+        f00 = count of neither a nor b appearing
+    returns:
+        float in range [0, 1] where 1 indicates maximum confidence and
+            0 indicates no confidence
+    """
+    zero = 1e-10
+    return f11 / (f11 + f10 + zero)
+
+
+def rule_lift(f11, f10, f01, f00):
+    """
+    Computes the lift for a rule `a -> b` based on the contingency table.
+    params:
+        f11 = count a and b appearing together
+        f10 = count of a appearing without b
+        f01 = count of b appearing without a
+        f00 = count of neither a nor b appearing
+    returns:
+        float ranging from zero to infinity where 1 implies independence, greater
+        than 1 implies positive association, less than 1 implies negative association
+    """
+    N = f11 + f10 + f01 + f00
+    zero = 1e-10
+    supp_ab = f11 / N
+    supp_a = f10 / N
+    supp_b = f01 / N
+    return supp_ab / ((supp_a * supp_b) + zero)
+
+
+def rule_conviction(f11, f10, f01, f00):
+    """
+    Computes the conviction for a rule `a -> b` based on the contingency table.
+    params:
+        f11 = count a and b appearing together
+        f10 = count of a appearing without b
+        f01 = count of b appearing without a
+        f00 = count of neither a nor b appearing
+    returns:
+        float in range [0, 1]
+    """
+    N = f11 + f10 + f01 + f00
+    zero = 1e-10
+    supp_b = f01 / N
+    conf = rule_confidence(f11, f10, f01, f00)
+    return (1 - supp_b) / ((1 - conf) + zero)
+
+
+def rule_power_factor(f11, f10, f01, f00):
+    """
+    Computes the rule power factor (RPF) for a rule `a -> b` based on the contingency table.
+    params:
+        f11 = count a and b appearing together
+        f10 = count of a appearing without b
+        f01 = count of b appearing without a
+        f00 = count of neither a nor b appearing
+    returns:
+        float in range [0, 1]
+    """
+    N = f11 + f10 + f01 + f00
+    zero = 1e-10
+    supp_ab = f11 / N
+    supp_a = f10 / N
+    return (supp_ab * supp_ab) / (supp_a + zero)
+
+
+def rule_interest_factor(f11, f10, f01, f00):
+    """
+    Computes the interest factor for a rule `a -> b` based on the contingency table.
+    params:
+        f11 = count a and b appearing together
+        f10 = count of a appearing without b
+        f01 = count of b appearing without a
+        f00 = count of neither a nor b appearing
+    returns:
+        float in range [0, 1] where 1 indicates maximum interest and
+            0 indicates no interest
+    """
+    N = f11 + f10 + f01 + f00
+    zero = 1e-10
+    f1p = f11 + f10
+    fp1 = f11 + f01
+    return (N * f11) / ((f1p * fp1) + zero)
+
+
+def rule_phi_correlation(f11, f10, f01, f00):
+    """
+    Computes the phi correlation for a rule `a -> b` based on the contingency table.
+    params:
+        f11 = count a and b appearing together
+        f10 = count of a appearing without b
+        f01 = count of b appearing without a
+        f00 = count of neither a nor b appearing
+    returns:
+        float in range [-1, 1] where 1 indicates perfect positive correlation and
+            -1 indicates perfect negative correlation.
+    """
+    f1p = f11 + f10
+    f0p = f01 + f00
+    fp1 = f11 + f01
+    fp0 = f10 + f00
+    num = (f11 * f00) - (f01 * f10)
+    denom = np.sqrt(f1p * fp1 * f0p * fp0)
+    if denom == 0:
+        return 0.0
+    return num / denom
+
+
+def rule_is_score(f11, f10, f01, f00):
+    """
+    Computes the IS score for a rule `a -> b` based on the contingency table.
+    params:
+        f11 = count a and b appearing together
+        f10 = count of a appearing without b
+        f01 = count of b appearing without a
+        f00 = count of neither a nor b appearing
+    returns:
+        float in range [0, 1] where 1 indicates maximum int3erest and
+            0 indicates no int3erest
+    """
+    intfac = rule_interest_factor(f11, f10, f01, f00)
+    supp = rule_support(f11, f10, f01, f00)
+    return np.sqrt(intfac * supp)
+
+
+def mine_association_rules(m_train, min_support=0.5):
+    """
+    Finds association rules using the Apriori algorithm. Produces rules of the form `a -> b`,
+    which suggests that if a user likes item `a`, then they may also like item `b`.
+    params:
+        m_train: matrix of train data, rows = users, columns = items, 1 = like, 0 otherwise
+        min_support: A float between 0 and 1 for minumum support of the itemsets returned.
+          The support is computed as the fraction:
+            transactions_where_item(s)_occur / total_transactions
+    returns:
+        rule_df: Pandas dataframe of association rules, with columns:
+            "a": antecedent (LHS) item index
+            "b": consequent (RHS) item index
+            "ct": tuple of contingency table entries for the rule
+            "support": support for the rule `a -> b` in m_train
+    """
+    freq_is = apriori(pd.DataFrame(m_train), max_len=2, min_support=min_support)
+    freq_is["len"] = freq_is["itemsets"].apply(lambda s: len(s))
+    freq_is = freq_is.query("len == 2")
+    if len(freq_is) == 0:
+        return pd.DataFrame([], columns=["a", "b", "ct", "support"])
+    item_counts = m_train.sum(axis=0)
+    rules = []
+    for record in freq_is.to_dict(orient="records"):
+        fset = record["itemsets"]
+        a = min(fset)
+        b = max(fset)
+        n = len(m_train)
+        supp = record["support"]
+        all_a = item_counts[a]
+        all_b = item_counts[b]
+        both = supp * n
+        f11 = int(both)
+        f10 = int(all_a - both)
+        f01 = int(all_b - both)
+        f00 = int(n - (f11 + f10 + f01))
+        rules.append({"a": a, "b": b, "ct": (f11, f10, f01, f00), "support": supp})
+        rules.append({"a": b, "b": a, "ct": (f11, f01, f10, f00), "support": supp})
+    rule_df = pd.DataFrame(rules)
+    return rule_df
+
+
+def rank_association_rules(mined_rules_df, score_fn, score_name="score"):
+    """
+    Ranks association rules according to a given score function.
+    params:
+        mined_rules_df: Pandas dataframe of association rules to rank, with columns:
+            "a": antecedent (LHS) item index
+            "b": consequent (RHS) item index
+            "ct": tuple of contingency table entries for the rule
+        score_fn(f11, f10, f01, f11): function for scoring rules, takes the entries
+            of the contingency table as parameters
+        score_name: label to name column with result of the score function
+    returns:
+        rule_df: copy of mined_rules_df, with the additional column:
+            score_name: result of the score function
+            Sorted in descending order by score_name
+    """
+    rule_df = pd.DataFrame(mined_rules_df.copy())
+    rule_df[score_name] = rule_df["ct"].apply(lambda ct: score_fn(*ct))
+    return rule_df.sort_values(by=score_name, ascending=False)
+
+
+"""
 RECOMMENDATION ALGORITHMS
 """
 
 
-def collaborative_filter(s_train, s_input, k=10, j=3, sim_fn=jaccard_sim):
+def collaborative_filter(s_train, s_input, j=3, sim_fn=None, threshold=0.01, k=10):
     """
     Collaborative filtering recommender system.
     params:
         s_train: list of sets of liked item indices for train data
         s_input: list of sets of liked item indices for input data
-        k: number of items to recommend for each user
         j: number of similar users to base recommendations on
         sim_fn(u, v): function that returns a float value representing
             the similarity between sets u and v
+        threshold: minimum similarity required to consider a similar user
+        k: number of items to recommend for each user
     returns:
         recs_pred: list of lists of tuples of recommendations where
             each tuple has (item index, relevance score) with the list
             of tuples sorted in order of decreasing relevance
     """
+    if sim_fn is None:
+        raise ValueError("Must specify a similarity function.")
     check_list_of_sets(s_train, "s_train")
     check_list_of_sets(s_input, "s_input")
     recs_pred = []
@@ -404,7 +646,7 @@ def collaborative_filter(s_train, s_input, k=10, j=3, sim_fn=jaccard_sim):
         users = []
         for vec in s_train:
             sim = sim_fn(src, vec)
-            if sim > 0:
+            if sim >= threshold:
                 users.append((sim, vec))
         j_users = min(len(users), j)
         if j_users > 0:
@@ -419,9 +661,7 @@ def collaborative_filter(s_train, s_input, k=10, j=3, sim_fn=jaccard_sim):
                         opts[item] += 1
             ranks = []
             for item in opts:
-                count = opts[item]
-                score = count / len(sim_user_sets)
-                ranks.append((item, score))
+                ranks.append((item, opts[item] / len(sim_user_sets)))
             top_ranks = sorted(ranks, key=lambda p: p[1], reverse=True)
             k_recs = min(len(top_ranks), k)
             recs = top_ranks[0:k_recs]
@@ -431,20 +671,23 @@ def collaborative_filter(s_train, s_input, k=10, j=3, sim_fn=jaccard_sim):
     return recs_pred
 
 
-def content_filter(items_train, s_input, k=10, sim_fn=jaccard_sim):
+def content_filter(items_train, s_input, sim_fn=None, threshold=0.01, k=10):
     """
     Content-based filtering recommender system.
     params:
         items_train: list of sets of non-zero attribute indices for items
         s_input: list of sets of liked item indices for input data
-        k: number of items to recommend for each user
         sim_fn(u, v): function that returns a float value representing
             the similarity between sets u and v
+        threshold: minimum similarity required to consider a similar item
+        k: number of items to recommend for each user
     returns:
         recs_pred: list of lists of tuples of recommendations where
             each tuple has (item index, relevance score) with the list
             of tuples sorted in order of decreasing relevance
     """
+    if sim_fn is None:
+        raise ValueError("Must specify a similarity function.")
     check_list_of_sets(items_train, "items_train")
     check_list_of_sets(s_input, "s_input")
     recs_pred = []
@@ -466,7 +709,7 @@ def content_filter(items_train, s_input, k=10, sim_fn=jaccard_sim):
     return recs_pred
 
 
-def svd_filter(m_train, m_input, n_factors=2, baselines=None, threshold=0, k=10):
+def svd_filter(m_train, m_input, n_factors=2, baselines=None, threshold=0.01, k=10):
     """
     Matrix factorization recommender system using Singular Value Decomposition (SVD).
     params:
@@ -513,7 +756,47 @@ def svd_filter(m_train, m_input, n_factors=2, baselines=None, threshold=0, k=10)
     return s_b_test, (u, s, vt)
 
 
-def weighted_hybrid(components, k=10, use_ranks=False):
+def association_filter(rule_df, m_train, s_input, score_fn=None, min_score=0.01, k=10):
+    """
+    Association rule recommender system using frequent itemsets.
+    params:
+        rule_df: Pandas dataframe of association rules to use, with columns:
+            "a": antecedent (LHS) item index
+            "b": consequent (RHS) item index
+            "ct": tuple of contingency table entries for the rule
+        m_train: matrix of train data, rows = users, columns = items, 1 = like, 0 otherwise
+        s_input: list of sets of liked item indices for input data
+        score_fn(f11, f10, f01, f11): function for scoring rules, takes the entries
+            of the contingency table as parameters
+        min_score: minimum result from score function required to use an association rule
+        k: number of items to recommend for each user
+    returns:
+        top_rules_df: copy of rule_df, with the additional column:
+            "score": result of the score function
+            Sorted in descending order by "score"
+    """
+    if score_fn is None:
+        raise ValueError("Must specify a scoring function for association rules.")
+    score_name = "score"
+    ranked_rules = rank_association_rules(
+        rule_df, score_fn=score_fn, score_name=score_name
+    )
+    top_rules_df = ranked_rules.query("{} >= {}".format(score_name, min_score))
+    rule_records = top_rules_df.to_dict(orient="records")
+    all_recs = []
+    for likes in s_input:
+        rec_map = {}
+        for rule in rule_records:
+            if rule["a"] in likes and rule["b"] not in likes:
+                if rule["b"] not in rec_map:
+                    rec_map[rule["b"]] = 0
+                rec_map[rule["b"]] += rule[score_name]
+        ranks = sorted(rec_map.items(), key=lambda p: p[1], reverse=True)
+        all_recs.append(ranks[0:k])
+    return all_recs, top_rules_df
+
+
+def weighted_hybrid(components, use_ranks=False, k=10):
     """
     Hybrid recommender system using weights.
     params:
@@ -521,11 +804,11 @@ def weighted_hybrid(components, k=10, use_ranks=False):
             where recs_list is a list of tuples where each tuple has
             (item index, relevance score) and weight is the factor used to
             scale the relevance scores for this component
-        k: number of items to recommend for each user
         use_ranks: boolean (default: False), if True, apply weights to the
             inverse rank of each item instead of its score, for example:
             the first recommended item will earn 1 * weight, the second will
             earn 1/2 * weight, the third will earn 1/3 * weight and so on
+        k: number of items to recommend for each user
     returns:
         recs_pred: list of lists of tuples of recommendations where
             each tuple has (item index, relevance score) with the list
