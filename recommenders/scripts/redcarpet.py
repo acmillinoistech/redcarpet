@@ -13,7 +13,7 @@ HELPER METHODS
 
 def nonzero_index_set(arr):
     """
-    Returns a set of  indices corresponding to non-zero
+    Returns a set of indices corresponding to non-zero
     entries in a numpy array (or other list-like).
     """
     res = set()
@@ -72,6 +72,21 @@ def write_kaggle_recs(recs_list, filename=None, headers=["Id", "Predicted"]):
     with open(filename, "w") as file:
         file.write(text)
     return len(lines) - 1
+
+
+def check_list_of_sets(s_data, var_name):
+    if not isinstance(s_data, list):
+        raise ValueError(
+            "{} must be a list of sets. Got: {}".format(var_name, type(s_data))
+        )
+    if len(s_data) > 0:
+        entry = s_data[0]
+        if not isinstance(entry, set):
+            raise ValueError(
+                "{} must be a list of sets. Got list of: {}".format(
+                    var_name, type(entry)
+                )
+            )
 
 
 """
@@ -163,17 +178,60 @@ def cosine_sim(u, v):
     return sim
 
 
+def forbes_sim(u, v):
+    """
+    Computes the Forbes similarity between sets u and v.
+    sim = a/((a+b)*(a+c))
+    Where a = # of items in intersection(u, v)
+          b = # of items only in u
+          c = # of items only in v
+    Note: n is omitted since it is constant for all vectors.
+    params:
+        u, v: sets to compare
+    returns:
+        float between 0 and 1, where 1 represents perfect
+            similarity and 0 represents no similarity
+    """
+    a = len(u.intersection(v))
+    b = len(u) - a
+    c = len(v) - a
+    zero = 1e-10
+    sim = a / (((a + b) * (a + c)) + zero)
+    return sim
+
+
+def mcconnoughy_sim(u, v):
+    """
+    Computes the McConnoughy similarity between sets u and v.
+    sim = (a*a - b*c) / sqrt((a+b)*(a+c))
+    Where a = # of items in intersection(u, v)
+          b = # of items only in u
+          c = # of items only in v
+    params:
+        u, v: sets to compare
+    returns:
+        float between 0 and 1, where 1 represents perfect
+            similarity and 0 represents no similarity
+    """
+    a = len(u.intersection(v))
+    b = len(u) - a
+    c = len(v) - a
+    zero = 1e-10
+    sim = ((a * a) - (b * c)) / (np.sqrt((a + b) * (a + c)) + zero)
+    return sim
+
+
 """
 RECOMMENDATION ALGORITHMS
 """
 
 
-def collaborative_filter(recs_train, recs_input, k=10, j=3, sim_fn=jaccard_sim):
+def collaborative_filter(s_train, s_input, k=10, j=3, sim_fn=jaccard_sim):
     """
     Collaborative filtering recommender system.
     params:
-        recs_train: list of sets of liked item indices for train data
-        recs_input: list of sets of liked item indices for input data
+        s_train: list of sets of liked item indices for train data
+        s_input: list of sets of liked item indices for input data
         k: number of items to recommend for each user
         j: number of similar users to base recommendations on
         sim_fn(u, v): function that returns a float value representing
@@ -183,10 +241,12 @@ def collaborative_filter(recs_train, recs_input, k=10, j=3, sim_fn=jaccard_sim):
             each tuple has (item index, relevance score) with the list
             of tuples sorted in order of decreasing relevance
     """
+    check_list_of_sets(s_train, "s_train")
+    check_list_of_sets(s_input, "s_input")
     recs_pred = []
-    for src in recs_input:
+    for src in s_input:
         users = []
-        for vec in recs_train:
+        for vec in s_train:
             sim = sim_fn(src, vec)
             if sim > 0:
                 users.append((sim, vec))
@@ -215,12 +275,12 @@ def collaborative_filter(recs_train, recs_input, k=10, j=3, sim_fn=jaccard_sim):
     return recs_pred
 
 
-def content_filter(items_train, recs_input, k=10, sim_fn=jaccard_sim):
+def content_filter(items_train, s_input, k=10, sim_fn=jaccard_sim):
     """
     Content-based filtering recommender system.
     params:
         items_train: list of sets of non-zero attribute indices for items
-        recs_input: list of sets of liked item indices for input data
+        s_input: list of sets of liked item indices for input data
         k: number of items to recommend for each user
         sim_fn(u, v): function that returns a float value representing
             the similarity between sets u and v
@@ -229,8 +289,10 @@ def content_filter(items_train, recs_input, k=10, sim_fn=jaccard_sim):
             each tuple has (item index, relevance score) with the list
             of tuples sorted in order of decreasing relevance
     """
+    check_list_of_sets(items_train, "items_train")
+    check_list_of_sets(s_input, "s_input")
     recs_pred = []
-    for src in recs_input:
+    for src in s_input:
         sim_items = []
         for item_new_idx, item_new in enumerate(items_train):
             total_sim = 0
@@ -248,7 +310,7 @@ def content_filter(items_train, recs_input, k=10, sim_fn=jaccard_sim):
     return recs_pred
 
 
-def weighted_hybrid(components, k=10):
+def weighted_hybrid(components, k=10, use_ranks=False):
     """
     Hybrid recommender system using weights.
     params:
@@ -257,6 +319,10 @@ def weighted_hybrid(components, k=10):
             (item index, relevance score) and weight is the factor used to
             scale the relevance scores for this component
         k: number of items to recommend for each user
+        use_ranks: boolean (default: False), if True, apply weights to the
+            inverse rank of each item instead of its score, for example:
+            the first recommended item will earn 1 * weight, the second will
+            earn 1/2 * weight, the third will earn 1/3 * weight and so on
     returns:
         recs_pred: list of lists of tuples of recommendations where
             each tuple has (item index, relevance score) with the list
@@ -274,10 +340,15 @@ def weighted_hybrid(components, k=10):
             )
         for user_id, recs in enumerate(recs_list):
             item_map = user_item_maps[user_id]
-            for (item, score) in recs:
+            for i, (item, score) in enumerate(recs):
                 if item not in item_map:
                     item_map[item] = 0
-                item_map[item] += weight * score
+                if use_ranks:
+                    rank = i + 1
+                    inv_rank = 1 / rank
+                    item_map[item] += weight * inv_rank
+                else:
+                    item_map[item] += weight * score
     for item_map in user_item_maps:
         item_scores = item_map.items()
         ranks = sorted(item_scores, key=lambda p: p[1], reverse=True)
