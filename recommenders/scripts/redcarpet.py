@@ -94,45 +94,85 @@ EVALUATION METRICS
 """
 
 
-def mapk_score(recs_true, recs_pred, k=10):
+def mapk_score(s_hidden, recs_pred, k=10):
     """
     Computes the mean average precision at k (MAP@K) of recommendations.
     MAP@K = mean AP@K score over all users
-    AP@K = (1 / m) * sum from 1 to k of (precision at i * relevance of ith item)
+    AP@K = (1 / min(m, k)) * sum from 1 to k of (precision at i * relevance of ith item)
     Where m is the number of items in a user's hidden set
     Where k is the number of items recommended to each user
     params:
-        recs_true: list of sets of hidden items for each user
-        recs_pred: list of lists of recommended items, with each list
-        k: number of recommendations to use in top set
-    returns:
-        float, range [0, 1], though score of 1 will be impossible if
-        recs_true includes users who have more than k hidden items
-    """
-    return ml_metrics.mapk(recs_true, recs_pred, k)
-
-
-def uhr_score(recs_true, recs_pred, k=10):
-    """
-    Computes the user hit tate (UHR) score of recommendations.
-    UHR = the fraction of users whose top list included at
-    least one item also in their hidden set.
-    params:
-        recs_true: list of sets of hidden items for each user
+        s_hidden: list of sets of hidden items for each user
         recs_pred: list of lists of recommended items, with each list
         k: number of recommendations to use in top set
     returns:
         float, range [0, 1]
     """
-    if len(recs_true) != len(recs_pred):
+    check_list_of_sets(s_hidden, "s_hidden")
+    return ml_metrics.mapk(s_hidden, recs_pred, k)
+
+
+def uhr_score(s_hidden, recs_pred, k=10):
+    """
+    Computes the user hit tate (UHR) score of recommendations.
+    UHR = the fraction of users whose top list included at
+    least one item also in their hidden set.
+    params:
+        s_hidden: list of sets of hidden items for each user
+        recs_pred: list of lists of recommended items, with each list
+        k: number of recommendations to use in top set
+    returns:
+        float, range [0, 1]
+    """
+    check_list_of_sets(s_hidden, "s_hidden")
+    if len(s_hidden) != len(recs_pred):
         note = "Length of true list {} does not match length of recommended list {}."
-        raise ValueError(note.format(len(recs_true), len(recs_pred)))
+        raise ValueError(note.format(len(s_hidden), len(recs_pred)))
     scores = []
-    for r_true, r_pred_orig in zip(recs_true, recs_pred):
+    for r_true, r_pred_orig in zip(s_hidden, recs_pred):
         r_pred = list(r_pred_orig)[0:k]
         intersect = set(r_true).intersection(set(r_pred))
         scores.append(1 if len(intersect) > 0 else 0)
     return np.mean(scores)
+
+
+def get_apk_scores(s_hidden, recs_pred, k=10):
+    """
+    Returns the average precision at k (AP@K) for each user.
+    AP@K = (1 / min(m, k)) * sum from 1 to k of (precision at i * relevance of ith item)
+    Where m is the number of items in a user's hidden set
+    Where k is the number of items recommended to each user
+    params:
+        s_hidden: list of sets of hidden items for each user
+        recs_pred: list of lists of recommended items, with each list
+        k: number of recommendations to use in top set
+    returns:
+        list of floats, each float in the range [0, 1]
+    """
+    check_list_of_sets(s_hidden, "s_hidden")
+    apks = []
+    for r_true, r_pred in zip(s_hidden, recs_pred):
+        apk = mapk_score([r_true], [r_pred], k=k)
+        apks.append(apk)
+    return apks
+
+
+def get_hit_counts(s_hidden, recs_pred, k=10):
+    """
+    Returns the number of successful recommendations for each user.
+    params:
+        s_hidden: list of sets of hidden items for each user
+        recs_pred: list of lists of recommended items, with each list
+        k: number of recommendations to use in top set
+    returns:
+        list of integers, each integer in the range [0, k]
+    """
+    check_list_of_sets(s_hidden, "s_hidden")
+    hits = []
+    for r_true, r_pred in zip(s_hidden, recs_pred):
+        ix = r_true.intersection(set(r_pred[0:k]))
+        hits.append(len(ix))
+    return hits
 
 
 """
@@ -218,6 +258,70 @@ def mcconnoughy_sim(u, v):
     c = len(v) - a
     zero = 1e-10
     sim = ((a * a) - (b * c)) / (np.sqrt((a + b) * (a + c)) + zero)
+    return sim
+
+
+def simpson_sim(u, v):
+    """
+    Computes the Simpson similarity coefficient between sets u and v.
+    sim = intersection(u, v) / min(|u|, |v|)
+    Where |s| is the number of items in set s
+    params:
+        u, v: sets to compare
+    returns:
+        float between 0 and 1, where 1 represents perfect
+            similarity and 0 represents no similarity
+    """
+    ix = len(u.intersection(v))
+    zero = 1e-10
+    sim = ix / (min(len(u), len(v)) + zero)
+    return sim
+
+
+def first_kulczynski_sim(u, v):
+    """
+    Computes the first Kulczynski similarity between sets u and v.
+    sim = a / (b + c)
+    Where a = # of items in intersection(u, v)
+          b = # of items only in u
+          c = # of items only in v
+    Note: If (b + c) is zero, this measure is undefined. In this
+        implementation, a small value (1e-4) is added to the
+        denominator to avoid division by zero. Consequently, the
+        similarity between two sets with `a` matches will be equal
+        to a / 1e-4, which is equivalent to a * 1000
+    params:
+        u, v: sets to compare
+    returns:
+        float from zero to infinity, where higher scores represents
+            greater similarity and zero represents no similarity
+    """
+    a = len(u.intersection(v))
+    b = len(u) - a
+    c = len(v) - a
+    zero = 1e-4
+    sim = a / (b + c + zero)
+    return sim
+
+
+def second_kulczynski_sim(u, v):
+    """
+    Computes the second Kulczynski similarity between sets u and v.
+    sim = (1/2) * ((a / (a + b)) + (a / (a + c)) )
+    Where a = # of items in intersection(u, v)
+          b = # of items only in u
+          c = # of items only in v
+    params:
+        u, v: sets to compare
+    returns:
+        float between 0 and 1, where 1 represents perfect
+            similarity and 0 represents no similarity
+    """
+    a = len(u.intersection(v))
+    b = len(u) - a
+    c = len(v) - a
+    zero = 1e-10
+    sim = ((a / (a + b + zero)) + (a / (a + c + zero))) / 2
     return sim
 
 
