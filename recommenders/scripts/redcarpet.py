@@ -1,5 +1,10 @@
 import numpy as np
+import pandas as pd
 import ml_metrics
+import base64
+from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import svds
+from IPython.display import HTML
 
 
 """
@@ -72,6 +77,36 @@ def write_kaggle_recs(recs_list, filename=None, headers=["Id", "Predicted"]):
     with open(filename, "w") as file:
         file.write(text)
     return len(lines) - 1
+
+
+def download_kaggle_recs(recs_list, filename=None, headers=["Id", "Predicted"]):
+    """
+    Writes recommendations to file in Kaggle submission format.
+    params:
+        recs_list: list of lists of recommendations where each
+            list has the column indices of recommended items
+            sorted in order of decreasing relevance
+        filename: path to file for writing output
+        headers: list of strings of output columns, defaults to
+            submission columns: ["Id", "Predicted"]
+    returns:
+        html: HTML download link to display in a notebook, click
+            to download the submission file
+    """
+    if filename is None:
+        raise ValueError("Must provide a filename.")
+    rec_df = pd.DataFrame(
+        [(i, " ".join([str(r) for r in recs])) for i, recs in enumerate(recs_list)],
+        columns=headers,
+    )
+    csv = rec_df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode())
+    payload = b64.decode()
+    html = """<a download="{filename}"
+                href="data:text/csv;base64,{payload}"
+                target="_blank">Download ({lines} lines): {filename}</a>"""
+    html = html.format(payload=payload, filename=filename, lines=len(rec_df))
+    return HTML(html)
 
 
 def check_list_of_sets(s_data, var_name):
@@ -429,6 +464,53 @@ def content_filter(items_train, s_input, k=10, sim_fn=jaccard_sim):
         recs = top_ranks[0:k_recs]
         recs_pred.append(recs)
     return recs_pred
+
+
+def svd_filter(m_train, m_input, n_factors=2, baselines=None, threshold=0, k=10):
+    """
+    Matrix factorization recommender system using Singular Value Decomposition (SVD).
+    params:
+        m_train: matrix of train data, rows = users, columns = items, 1 = like, 0 otherwise
+        m_input: matrix of input data, rows = users, columns = items, 1 = like, 0 otherwise
+        n_factors: number of latent factors to estimate (default: 2)
+        baselines: numpy array of values to fill empty input entries, array length
+            equal to the number of columns in `m_train` and `m_input` (default: None)
+        threshold: minimum score to qualify as a recommended item
+        k: number of items to recommend for each user
+        sim_fn(u, v): function that returns a float value representing
+            the similarity between sets u and v
+    returns:
+        recs_pred: list of lists of tuples of recommendations where
+            each tuple has (item index, relevance score) with the list
+            of tuples sorted in order of decreasing relevance
+        (u, s, vt): tuple of matrix factors produced by SVD:
+            u: latent user matrix, rows = users, columns = latent factors
+            s: array of latent factor weights
+            vt: transposed latent item matrix, rows = latent factors, columns = items
+            To estimate the matrix, compute: `B = u.dot(np.diag(s)).dot(vt)`
+    """
+    m_input_filled = m_input
+    if baselines is not None:
+        m_input_filled = m_input + np.vstack([baselines for i in range(len(m_input))])
+        m_input_filled = np.clip(m_input_filled, a_min=0, a_max=1)
+    m_all = np.vstack([m_train, m_input_filled])
+    A = csc_matrix(m_all, dtype=float)
+    u, s, vt = svds(A, k=n_factors)
+    B = u.dot(np.diag(s)).dot(vt)
+    s_b_test = []
+    row_base = len(m_train)
+    for row_add in range(len(m_input)):
+        inp = m_input[row_add]
+        row_id = row_base + row_add
+        row = B[row_id]
+        rec_scores = []
+        for col, (score, orig) in enumerate(zip(row, inp)):
+            if orig < 1:
+                if score >= threshold:
+                    rec_scores.append((col, score))
+        ranks = sorted(rec_scores, key=lambda p: p[1], reverse=True)
+        s_b_test.append(ranks[0:k])
+    return s_b_test, (u, s, vt)
 
 
 def weighted_hybrid(components, k=10, use_ranks=False):
