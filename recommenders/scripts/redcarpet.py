@@ -325,6 +325,23 @@ def second_kulczynski_sim(u, v):
     return sim
 
 
+def sorenson_dice_sim(u, v):
+    """
+    Computes the Sørensen-Dice similarity coefficient between sets u and v.
+    sim = (2 * intersection(u, v)) / (|u| + |v|)
+    Where |s| is the number of items in set s
+    params:
+        u, v: sets to compare
+    returns:
+        float between 0 and 1, where 1 represents perfect
+            similarity and 0 represents no similarity
+    """
+    ix = len(u.intersection(v))
+    zero = 1e-10
+    sim = (2 * ix) / (len(u) + len(v) + zero)
+    return sim
+
+
 """
 RECOMMENDATION ALGORITHMS
 """
