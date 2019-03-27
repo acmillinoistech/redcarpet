@@ -153,7 +153,7 @@ def mapk_score(s_hidden, recs_pred, k=10):
 
 def uhr_score(s_hidden, recs_pred, k=10):
     """
-    Computes the user hit tate (UHR) score of recommendations.
+    Computes the user hit rate (UHR) score of recommendations.
     UHR = the fraction of users whose top list included at
     least one item also in their hidden set.
     params:
@@ -215,6 +215,9 @@ def get_hit_counts(s_hidden, recs_pred, k=10):
 
 
 def get_all_scores(rec_scores, k=10):
+    """
+    Get scores of all items in the list of lists of recommendations.
+    """
     all_scores = []
     for recs in rec_scores:
         for (item, score) in recs[0:k]:
@@ -228,6 +231,9 @@ ANALYSIS TOOLS
 
 
 def show_apk_dist(s_hidden, models, k=10, bin_size=0.1):
+    """
+    Plot a histogram of average precision scores for all users.
+    """
     bins = np.arange(0, 1 + bin_size, bin_size)
     pal = sns.color_palette("hls", len(models))
     for ((rec_scores, name), color) in zip(models, pal):
@@ -246,7 +252,10 @@ def show_apk_dist(s_hidden, models, k=10, bin_size=0.1):
 
 
 def show_hit_dist(s_hidden, models, k=10):
-    bins = range(k)
+    """
+    Plot a histogram of hit counts for all users.
+    """
+    bins = range(k + 1)
     pal = sns.color_palette("hls", len(models))
     for ((rec_scores, name), color) in zip(models, pal):
         hits = get_hit_counts(s_hidden, get_recs(rec_scores), k=k)
@@ -264,6 +273,9 @@ def show_hit_dist(s_hidden, models, k=10):
 
 
 def show_score_dist(models, k=10, bins=None):
+    """
+    Plot a histogram of item recommendation scores for all users.
+    """
     pal = sns.color_palette("hls", len(models))
     for ((rec_scores, name), color) in zip(models, pal):
         scores = get_all_scores(rec_scores, k=k)
@@ -285,6 +297,9 @@ def show_score_dist(models, k=10, bins=None):
 
 
 def show_user_detail(s_input, s_hidden, rec_scores, uid, name_fn=None, k=10):
+    """
+    Show the detailed results of recommendations to a user.
+    """
     s_pred = get_recs(rec_scores)
     print("User: {}".format(uid))
     print("Given:       {}".format(sorted(s_input[uid])))
@@ -311,6 +326,9 @@ def show_user_detail(s_input, s_hidden, rec_scores, uid, name_fn=None, k=10):
 
 
 def show_user_recs(s_hidden, rec_scores, k=10):
+    """
+    Show a table of recommendation results by user.
+    """
     apks = get_apk_scores(s_hidden, get_recs(rec_scores), k=k)
     hits = get_hit_counts(s_hidden, get_recs(rec_scores), k=k)
     cols = ["User", "APK", "Hits"]
@@ -319,6 +337,9 @@ def show_user_recs(s_hidden, rec_scores, k=10):
 
 
 def show_item_recs(s_hidden, rec_scores, k=10):
+    """
+    Show a table of recommendation results by item.
+    """
     item_res = {}
     for (user, likes) in zip(rec_scores, s_hidden):
         for (i, score) in user:
